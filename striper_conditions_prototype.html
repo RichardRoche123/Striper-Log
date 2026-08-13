@@ -232,7 +232,7 @@
   <div class="status-line" id="statusLine"></div>
 
   <div class="coord-fallback">
-    <div class="coord-note" id="coordNote">Geolocation is blocked in this preview environment (sandboxed permissions policy). Enter coordinates below to keep testing — this won't be an issue once it's deployed as a real page.</div>
+    <div class="coord-note" id="coordNote">Could not get your location automatically. Enter coordinates below instead.</div>
     <button class="link-btn" id="toggleCoords">Enter coordinates manually instead ▾</button>
     <div class="manual-form" id="coordForm">
       <label for="manLat">Latitude</label>
@@ -304,6 +304,7 @@
         </select>
         <label for="manNote">Station / spot name (your own reference)</label>
         <input type="text" id="manNote" placeholder="e.g. Cuttyhunk backside">
+        <button class="link-btn" id="useManualTideBtn" style="margin-top:12px;">Use this manual entry for the log ✓</button>
       </div>
     </div>
   </div>
@@ -444,6 +445,7 @@ function renderStationList() {
     row.innerHTML = '<span>' + s.name + ' (' + s.state + ')</span><span class="d">' + s.distance.toFixed(1) + ' mi</span>';
     row.addEventListener('click', async () => {
       selectedStation = s;
+      usingManual = false;
       renderStationCurrent();
       document.getElementById('stationList').classList.remove('open');
       setStatus('Loading tides for ' + s.name + '…');
@@ -509,31 +511,39 @@ document.getElementById('toggleStations').addEventListener('click', () => {
 });
 
 document.getElementById('toggleManual').addEventListener('click', () => {
-  const form = document.getElementById('manualForm');
-  usingManual = !form.classList.contains('open');
-  form.classList.toggle('open');
+  document.getElementById('manualForm').classList.toggle('open');
+});
+
+document.getElementById('useManualTideBtn').addEventListener('click', () => {
+  usingManual = true;
+  updateCopyVisibility();
+  setStatus('Using manual tide entry for the log.');
 });
 
 document.getElementById('copyBtn').addEventListener('click', () => {
-  const lines = [];
-  lines.push('--- Conditions @ ' + new Date().toLocaleString('en-US') + ' ---');
+  const contentLines = [];
   if (lastWeather) {
     const tempF = cToF(lastWeather.temperature && lastWeather.temperature.value);
     const windMph = msToMph(lastWeather.windSpeed && lastWeather.windSpeed.value);
-    lines.push('Weather: ' + (lastWeather.textDescription || 'n/a') +
+    contentLines.push('Weather: ' + (lastWeather.textDescription || 'n/a') +
       ', ' + (tempF !== null ? Math.round(tempF) + 'F' : 'n/a') +
       ', wind ' + (windMph !== null ? Math.round(windMph) + 'mph' : 'n/a'));
   }
   if (usingManual) {
     const stage = document.getElementById('manStage').value;
     const note = document.getElementById('manNote').value;
-    lines.push('Tide (manual): ' + stage + (note ? ' — ' + note : ''));
+    contentLines.push('Tide (manual): ' + stage + (note ? ' — ' + note : ''));
   } else if (selectedStation) {
-    lines.push('Tide station: ' + selectedStation.name + ' (' + selectedStation.distance.toFixed(1) + ' mi)');
+    contentLines.push('Tide station: ' + selectedStation.name + ' (' + selectedStation.distance.toFixed(1) + ' mi)');
     if (lastTideStage) {
-      lines.push('Tide stage: ' + lastTideStage.direction + ', ' + Math.round(lastTideStage.pct * 100) + '% through cycle');
+      contentLines.push('Tide stage: ' + lastTideStage.direction + ', ' + Math.round(lastTideStage.pct * 100) + '% through cycle');
     }
   }
+  if (contentLines.length === 0) {
+    setStatus('Nothing to copy yet — fetch conditions first.', true);
+    return;
+  }
+  const lines = ['--- Conditions @ ' + new Date().toLocaleString('en-US') + ' ---', ...contentLines];
   const text = lines.join('\n');
   navigator.clipboard.writeText(text).then(() => {
     setStatus('Copied log entry to clipboard.');
@@ -607,11 +617,22 @@ fetchBtn.addEventListener('click', () => {
     await runConditionsFlow(pos.coords.latitude, pos.coords.longitude);
     fetchBtn.disabled = false;
   }, (err) => {
-    setStatus('Location error: ' + err.message, true);
+    let msg;
+    if (err.code === err.PERMISSION_DENIED) {
+      msg = 'Location permission denied. Allow location access in your browser, or enter coordinates below.';
+    } else if (err.code === err.POSITION_UNAVAILABLE) {
+      msg = 'No GPS signal available. Enter coordinates below instead.';
+    } else if (err.code === err.TIMEOUT) {
+      msg = 'Location request timed out. Try again, or enter coordinates below.';
+    } else {
+      msg = 'Could not get your location. Enter coordinates below instead.';
+    }
+    setStatus(msg, true);
+    document.getElementById('coordNote').textContent = msg;
     document.getElementById('coordNote').classList.add('show');
     document.getElementById('coordForm').classList.add('open');
     fetchBtn.disabled = false;
-  }, { enableHighAccuracy: true, timeout: 12000 });
+  }, { enableHighAccuracy: true, timeout: 20000 });
 });
 
 document.getElementById('toggleCoords').addEventListener('click', () => {
