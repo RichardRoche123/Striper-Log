@@ -363,7 +363,7 @@ async function fetchTidePredictions(stationId) {
     + '?product=predictions&application=StriperLogPrototype'
     + '&begin_date=' + begin + '&range=48'
     + '&datum=MLLW&station=' + stationId
-    + '&time_zone=lst_ld&units=english&interval=hilo&format=json';
+    + '&time_zone=lst_ldt&units=english&interval=hilo&format=json';
   const res = await fetch(url);
   const text = await res.text();
   let data;
