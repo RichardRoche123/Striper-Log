@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EXIF Test</title>
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+<style>
+  body {
+    margin: 0; padding: 24px 18px 60px;
+    background: #0C1820; color: #E7EEF2;
+    font-family: system-ui, sans-serif;
+  }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .sub { color: #8AA0AC; font-size: 13px; margin-bottom: 20px; }
+  input[type=file] {
+    display: block; width: 100%; padding: 14px;
+    background: #172936; border: 1px solid #24404F; color: #E7EEF2;
+    border-radius: 4px; font-size: 15px; margin-bottom: 20px;
+  }
+  .result {
+    background: #12232F; border: 1px solid #24404F; border-radius: 4px;
+    padding: 16px; margin-bottom: 12px;
+  }
+  .row { margin-bottom: 10px; }
+  .label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #8AA0AC; margin-bottom: 3px;
+  }
+  .val { font-size: 15px; word-break: break-word; }
+  .val.good { color: #4FD9C4; }
+  .val.bad { color: #E36A5C; }
+  .raw {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid #24404F;
+    font-family: monospace; font-size: 11px; color: #8AA0AC;
+    white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+
+  <h1>EXIF Test</h1>
+  <div class="sub">Pick a fish photo (or any photo) to see what timestamp and location data it carries. Nothing is uploaded anywhere — this all runs on your phone.</div>
+
+  <input type="file" id="fileInput" accept="image/*">
+
+  <div id="output"></div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const output = document.getElementById('output');
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      output.innerHTML = '<div class="result">Reading…</div>';
+
+      const div = document.createElement('div');
+      div.className = 'result';
+
+      const fileRow = document.createElement('div');
+      fileRow.className = 'row';
+      fileRow.innerHTML = '<div class="label">File</div><div class="val">' +
+        file.name + ' (' + file.type + ', ' + Math.round(file.size/1024) + ' KB)</div>';
+      div.appendChild(fileRow);
+
+      try {
+        const data = await exifr.parse(file, true);
+
+        // Timestamp
+        const dt = data && (data.DateTimeOriginal || data.CreateDate || data.ModifyDate);
+        const dtRow = document.createElement('div');
+        dtRow.className = 'row';
+        if (dt) {
+          dtRow.innerHTML = '<div class="label">Timestamp found</div><div class="val good">' +
+            new Date(dt).toLocaleString('en-US') + '</div>';
+        } else {
+          dtRow.innerHTML = '<div class="label">Timestamp found</div><div class="val bad">None — this photo has no capture-time metadata.</div>';
+        }
+        div.appendChild(dtRow);
+
+        // GPS
+        const gpsRow = document.createElement('div');
+        gpsRow.className = 'row';
+        try {
+          const gps = await exifr.gps(file);
+          if (gps && gps.latitude) {
+            gpsRow.innerHTML = '<div class="label">GPS found</div><div class="val good">' +
+              gps.latitude.toFixed(5) + ', ' + gps.longitude.toFixed(5) + '</div>';
+          } else {
+            gpsRow.innerHTML = '<div class="label">GPS found</div><div class="val bad">None — no location tag on this photo.</div>';
+          }
+        } catch (e) {
+          gpsRow.innerHTML = '<div class="label">GPS found</div><div class="val bad">None — no location tag on this photo.</div>';
+        }
+        div.appendChild(gpsRow);
+
+        // Raw dump for anything else worth seeing
+        const raw = document.createElement('div');
+        raw.className = 'raw';
+        raw.textContent = data ? JSON.stringify(data, null, 2) : '(no EXIF data at all)';
+        div.appendChild(raw);
+
+      } catch (e) {
+        const errRow = document.createElement('div');
+        errRow.className = 'row';
+        errRow.innerHTML = '<div class="label">Error</div><div class="val bad">' + e.message + '</div>';
+        div.appendChild(errRow);
+      }
+
+      output.innerHTML = '';
+      output.appendChild(div);
+    });
+  </script>
+
+</body>
+</html>
